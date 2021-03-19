@@ -1,186 +1,92 @@
-const express = require('express');
-const axios = require('axios');
+let express = require('express');
+let path = require('path');
+const { from } = require('responselike');
+const client = require('./db');
+let db = require('./db')
 
-const app = express();
-const port = 3000;
-const path = require('path');
-const { reset } = require('nodemon');
-const TOKEN = require('../config.js');
+let app = express();
+let PORT = 3003 || process.env.PORT;
 
-const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
+app.use(express.json())
 
-app.use(express.static(PUBLIC_DIR));
-app.use(express.json());
+app.get('/reviews/:product_id/:sort', (req, res) => {
+  const { product_id, sort } = req.params;
+  let sql;
+  if (sort === 'newest') {
+    sql = `SELECT * FROM review WHERE product_id = ${product_id} AND reported = false ORDER BY date DESC limit 10`
+  } else if (sort === 'helpful') {
+    sql = `SELECT * FROM review WHERE product_id = ${product_id} AND reported = false ORDER BY helpfulness DESC limit 10`
+  } else if (sort === 'relevant') {
+    sql = `SELECT * FROM review WHERE product_id = ${product_id} AND reported = false ORDER BY helpfulness DESC, date DESC limit 10`
+  }
 
-const url = 'https://app-hrsei-api.herokuapp.com/api/fec2/hr-sea/';
-            'https://app-hrsei-api.herokuapp.com/api/fec2/hr-sea/products/20113';
+  const response = {};
 
-// API request to get the product info
-app.get('/product/:params', (req, res) => {
-  const { params } = req.params;
-  axios.get(`${url}products/${params}`, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((data) => {
-      res.send(data.data);
+  db.query(sql)
+    .then((results) => {
+      response.results = results.rows;
+      let sql2;
+      let review_id;
+      let photosArray;
+      for (let i = 0; i < response.results.length; i++) {
+      review_id = response.results[i].id;
+      sql2 = `select array_to_json(array_agg(row_to_json(photos))) as rows
+      from(select url from photos where review_id = ${review_id}) photos`;
+  
+      client.query(sql2)
+        .then((photos) => {
+          // console.log('photos:', photos.rows[0].rows)
+          if (photos.rows[0].rows === null) {
+            photosArray = []
+          } else {
+            photosArray = photos.rows[0].rows;
+          }
+          // console.log('photosArray', photosArray)
+          response.results[i].photos = photosArray;
+          console.log(response.results.photos)
+        })
+        .catch((err) => console.log(err))
+        // console.log('RESPONSE: ', response)
+        // console.log(response.results[i].photos)
+      }
+      // console.log(response)
     })
-    .catch((err) => console.log('error getting product info', err.response.data));
-});
+    .then(() => res.send(response))
+    .catch((err) => console.log(err));
+})
 
-// API request to get the styles
-app.get('/styles/:params', (req, res) => {
-  const { params } = req.params;
-  axios.get(`${url}products/${params}/styles`, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((data) => {
-      res.send(data.data);
-    })
-    .catch((err) => console.log('error getting styles', err.response.data));
-});
+// app.get('/reviews/photos', (req, res) => {
+//  let sql = `select array_to_json(array_agg(row_to_json(photos))) as rows
+//  from(select url from photos where review_id = 5) photos`;
+//  db.query(sql)
+//   .then((result) => res.send(result))
+// })
 
-// API request to get the reviews based on a different sort option
-app.get('/reviews/:params', (req, res) => {
-  const { params } = req.params;
-  axios.get(`${url}reviews/?product_${params}`, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((data) => res.send(data.data))
-    .catch((err) => console.log('error getting reviews', err.response.data));
-});
 
-// API request to get the reviews meta data
-app.get('/reviews/meta/:params', (req, res) => {
-  const { params } = req.params;
-  axios.get(`${url}reviews/meta?product_${params}`, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((data) => res.send(data.data))
-    .catch((err) => console.log('error getting reviews', err.response.data));
-});
+app.get('/reviews/meta/:product_id', (req, res) => {
+  const { product_id } = req.params;
 
-app.get('/questions/:params', (req, res) => {
-  const { params } = req.params;
-  axios.get(`${url}qa/questions/?product_${params}`, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((data) => res.send(data.data))
-    .catch((err) => console.log('error getting questions', err.response.data));
-});
+  const result = {
+    product_id: product_id,
+    ratings: {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+    },
+    recommended: {
+      true: 0,
+      false: 0,
+    },
+    characteristics: {}
+  }
 
-// API request to increment the helpfulness counter
-app.put('/reviews/help', (req, res) => {
-  axios.put(`${url}reviews/${req.body.id}/helpful`, { body: { review_id: req.body.id } }, {
-    headers: { Authorization: TOKEN },
-  })
-    .then(() => res.sendStatus(204))
-    .catch((err) => console.log('server help error', err));
-});
+  let sql = `
+    SELECT value FROM characteristics_reviews JOIN reviews USING(review_id) WHERE product_id = ${product_id};
+    SELECT recommend FROM reviews WHERE product_id = ${product_id}`
+})
 
-// API request to remove the review
-app.put('/reviews/report', (req, res) => {
-  axios.put(`${url}reviews/${req.body.id}/report`, { body: { review_id: req.body.id } }, {
-    headers: { Authorization: TOKEN },
-  })
-    .then(() => res.send(204))
-    .catch((err) => console.log('server report error', err));
-});
-
-// API request to post a new review
-app.post('/newReview/', (req, res) => {
-  console.log('at the server', req.body);
-  axios.post(`${url}reviews`, req.body.reviewObj, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((response) => {
-      console.log('server review submit success');
-      res.sendStatus(201);
-    })
-    .catch((err) => {
-      console.log('server review submit error', err);
-      res.sendStatus(500);
-    });
-});
-
-// API request to post a new answer to an existing question
-app.post('/api/qa/questions/:questionId/answers', (req, res) => {
-  const { questionId } = req.params;
-  axios.post(`${url}qa/questions/${questionId}/answers`, req.body.params, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((response) => {
-      console.log('server answer submit response');
-      res.send(201);
-    })
-    .catch((err) => {
-      console.log('server answer submit error', err);
-      res.sendStatus(500);
-    });
-});
-
-// API request to post a new question
-app.post('/api/qa/questions', (req, res) => {
-  axios.post(`${url}qa/questions`, req.body, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((response) => {
-      console.log('server question submit response');
-      res.sendStatus(201);
-    })
-    .catch((err) => {
-      console.log('server question submit error', err);
-      res.sendStatus(500);
-    });
-});
-
-// API request to increment the helpfulness of an answer
-app.put('/api/qa/answers/:answerId/helpful', (req, res) => {
-  const { answerId } = req.params;
-  axios.put(`${url}qa/answers/${answerId}/helpful`, { body: { answer_id: req.body.id } }, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((response) => {
-      console.log('server helpfulness put response');
-      res.sendStatus(201);
-    })
-    .catch((err) => {
-      console.log('server helpfulness put error', err);
-      res.sendStatus(500);
-    });
-});
-
-// API request to increment the helpfulness of a question
-app.put('/api/qa/questions/:questionId/helpful', (req, res) => {
-  const { questionId } = req.params;
-  axios.put(`${url}qa/questions/${questionId}/helpful`, { body: { question_id: req.body.id } }, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((response) => {
-      console.log('server helpfulness question put response');
-      res.sendStatus(201);
-    })
-    .catch((err) => {
-      console.log('server helpfulness question put error', err);
-      res.sendStatus(500);
-    });
-});
-
-// API request to report this answer
-app.put('/api/qa/answers/:answerId/report', (req, res) => {
-  const { answerId } = req.params;
-  axios.put(`${url}qa/answers/${answerId}/report`, { body: { answer_id: req.body.id } }, {
-    headers: { Authorization: TOKEN },
-  })
-    .then((response) => {
-      console.log('server report put response');
-      res.sendStatus(201);
-    })
-    .catch((err) => {
-      console.log('server report put error', err);
-      res.sendStatus(500);
-    });
-});
-
-app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`);
-});
+app.listen(PORT, () => {
+  console.log(`Example app listening at http://localhost:${PORT}`)
+})

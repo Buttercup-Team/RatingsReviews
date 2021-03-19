@@ -1,7 +1,7 @@
 node_modules
 config.js
-bundle.js
-App.test.js
-*.cer
-*.pem
-*.test.jsx
+
+characteristic_reviews.csv
+characteristics.csv
+reviews_photos.csv
+reviews.csv
