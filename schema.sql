@@ -6,7 +6,7 @@ CREATE DATABASE reviews;
 
 CREATE TABLE review (
     id serial primary key,
-    product_id varchar,
+    product_id integer,
     rating integer,
     date date,
     summary VARCHAR(100),
@@ -21,7 +21,7 @@ CREATE TABLE review (
 
 CREATE TABLE characteristics (
     characteristics_id serial primary key,
-    product_id varchar,
+    product_id integer,
     name varchar
 );
 
