@@ -1,8 +1,8 @@
-psql;
 
 CREATE DATABASE reviews;
 
-\c reviews;
+\c reviews; 
+
 
 CREATE TABLE review (
     id serial primary key,

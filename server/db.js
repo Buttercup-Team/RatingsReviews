@@ -1,26 +1,15 @@
-const { Client } = require('pg');
+const { Pool } = require('pg');
 
-const client = new Client ({
-    host: 'localhost',
-    database: 'reviews',
+const pool = new Pool ({
+    host: '34.210.153.166',
+    user: 'postgres',
+    database: 'postgres',
+    password: 'password',
     port: 5432
 })
 
-client.connect((err) => {
-    if(err) {
-      console.log(err)
-    } else {
-      console.log('Connected to PostgreSQL :)')
-    }
-  });
+pool.query('SELECT NOW()')
+  .then(res => console.log('Connected to Postgres at', res.rows[0].now))
+  .catch(e => console.error(e.stack))
 
-module.exports = client;
-
-// client.query('select * from review where id = 2', (err, res) =>  {
-//     if (err) {
-//         console.log(err)
-//         return;
-//     }
-//     console.log(res.rows);
-//     client.end();
-// })
+module.exports = pool;
